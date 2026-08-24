@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Turnamen All-in-One</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        h1,
+        h2,
+        h3 {
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        /* TAB SYSTEM */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 25px;
+        }
+
+        .tab-btn {
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            background: none;
+            cursor: pointer;
+            color: #7f8c8d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn:hover {
+            color: #3498db;
+        }
+
+        .tab-btn.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* FORM STYLES */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+
+        .btn {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-danger {
+            background-color: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+
+        /* TABLE & MATCH STYLES */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ddd;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f8f9fa;
+        }
+
+        .match-box {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        select {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .champion-box {
+            background: #2ecc71;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .hint {
+            text-align: center;
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: -5px;
+            margin-bottom: 15px;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>🏆 Aplikasi Turnamen All-in-One</h1>
+
+        <!-- Navigasi Tab -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="openTab('group', event)">📊 Group Stage</button>
+            <button class="tab-btn" onclick="openTab('elim', event)">⚔️ Eliminasi</button>
+        </div>
+
+        <!-- TAB 1: GROUP STAGE -->
+        <div id="group" class="tab-content active">
+            <h2>📊 Mode Group Stage (Round Robin)</h2>
+            <p class="hint">*Peringkat diurutkan berdasarkan Poin. Jika Poin sama, sistem menggunakan Head-to-Head.</p>
+
+            {% if error_group %}
+            <div class="alert-error">{{ error_group }}</div>
+            {% endif %}
+
+            {% if not group_teams %}
+            <div class="form-group">
+                <label for="group_count">Masukkan Jumlah Tim (Minimal 2):</label>
+                <input type="number" id="group_count" min="2" placeholder="Contoh: 4">
+                <button type="button" class="btn" onclick="generateTeamFields('group')">Buat Kolom Tim</button>
+            </div>
+
+            <form action="{{ url_for('group_stage') }}" method="POST" id="form_group_teams"
+                style="display: none; margin-top: 20px;">
+                <div id="group_inputs_container"></div>
+                <button type="submit" class="btn">Generate Jadwal & Klasemen</button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('reset_group') }}" class="btn btn-danger" style="margin-bottom: 20px;">Reset Group
+                Stage</a>
+
+            <h3>🏆 Klasemen Sementara</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Posisi</th>
+                        <th>Tim</th>
+                        <th>Poin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for team, points in group_standings %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td><strong>{{ team }}</strong></td>
+                        <td>{{ points }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 30px;">📅 Jadwal Pertandingan</h3>
+            {% for match in group_matches %}
+            <div class="match-box">
+                <span><strong>{{ match.team1 }}</strong> vs <strong>{{ match.team2 }}</strong></span>
+
+                <form action="{{ url_for('update_group_match') }}" method="POST" style="margin: 0;">
+                    <input type="hidden" name="match_id" value="{{ match.id }}">
+                    <select name="winner" onchange="this.form.submit()">
+                        <option value="">-- Pilih Pemenang --</option>
+                        <option value="{{ match.team1 }}" {% if match.winner==match.team1 %}selected{% endif %}>{{
+                            match.team1 }} Menang</option>
+                        <option value="{{ match.team2 }}" {% if match.winner==match.team2 %}selected{% endif %}>{{
+                            match.team2 }} Menang</option>
+                    </select>
+                </form>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        <!-- TAB 2: ELIMINASI -->
+        <div id="elim" class="tab-content">
+            <h2>⚔️ Mode Eliminasi (Sistem Gugur)</h2>
+
+            {% if error_elim %}
+            <div class="alert-error">{{ error_elim }}</div>
+            {% endif %}
+
+            {% if elim_champion %}
+            <div class="champion-box">
+                🎉 JUARA TURNAMEN: {{ elim_champion }} 🎉
+            </div>
+            {% endif %}
+
+            {% if not elim_rounds %}
+            <div class="form-group">
+                <label for="elim_count">Masukkan Jumlah Tim (Minimal 2):</label>
+                <input type="number" id="elim_count" min="2" placeholder="Contoh: 8">
+                <button type="button" class="btn" onclick="generateTeamFields('elim')">Buat Kolom Tim</button>
+            </div>
+
+            <form action="{{ url_for('elimination') }}" method="POST" id="form_elim_teams"
+                style="display: none; margin-top: 20px;">
+                <div id="elim_inputs_container"></div>
+                <button type="submit" class="btn">Buat Braket Turnamen</button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('reset_elimination') }}" class="btn btn-danger" style="margin-bottom: 20px;">Reset
+                Eliminasi</a>
+
+            {% for round_matches in elim_rounds %}
+            <h3>Babak {{ loop.index }}</h3>
+            <form action="{{ url_for('advance_elimination') }}" method="POST">
+                {% for match in round_matches %}
+                <div class="match-box">
+                    <span><strong>{{ match.team1 }}</strong> vs <strong>{{ match.team2 }}</strong></span>
+
+                    {% if match.winner %}
+                    <span style="color: #27ae60; font-weight: bold;">Pemenang: {{ match.winner }}</span>
+                    {% elif match.team2 == 'BYE' %}
+                    <span style="color: #7f8c8d;">Lolos Otomatis (BYE)</span>
+                    {% else %}
+                    <select name="winner_{{ loop.index0 }}" required>
+                        <option value="">-- Pilih Pemenang --</option>
+                        <option value="{{ match.team1 }}">{{ match.team1 }}</option>
+                        <option value="{{ match.team2 }}">{{ match.team2 }}</option>
+                    </select>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                {% if loop.last and not elim_champion %}
+                <button type="submit" class="btn" style="margin-top: 15px;">Lanjut ke Babak Berikutnya →</button>
+                {% endif %}
+            </form>
+            <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function generateTeamFields(mode) {
+            const countInput = document.getElementById(mode + '_count');
+            const count = parseInt(countInput.value);
+
+            if (isNaN(count) || count < 2) {
+                alert('Minimal masukkan 2 tim!');
+                return;
+            }
+
+            const container = document.getElementById(mode + '_inputs_container');
+            const form = document.getElementById('form_' + mode + '_teams');
+            container.innerHTML = '<h3>Nama-Nama Tim:</h3>';
+
+            for (let i = 1; i <= count; i++) {
+                const div = document.createElement('div');
+                div.className = 'form-group';
+                div.innerHTML = `
+                <label>Tim ${i}:</label>
+                <input type="text" name="teams" placeholder="Nama Tim ${i}" required>
+            `;
+                container.appendChild(div);
+            }
+
+            form.style.display = 'block';
+        }
+
+        function openTab(tabName, evt) {
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(content => content.classList.remove('active'));
+
+            const buttons = document.querySelectorAll('.tab-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+
+            document.getElementById(tabName).classList.add('active');
+            if (evt) {
+                evt.currentTarget.classList.add('active');
+            }
+
+            localStorage.setItem('activeTab', tabName);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const activeTab = localStorage.getItem('activeTab');
+            if (activeTab) {
+                const btn = Array.from(document.querySelectorAll('.tab-btn'))
+                    .find(b => b.getAttribute('onclick').includes(activeTab));
+                if (btn) btn.click();
+            }
+        });
+    </script>
+
+</body>
+
+</html>

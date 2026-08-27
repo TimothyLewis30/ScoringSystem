@@ -1,108 +1,114 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Group Stage</title>
+    <title>Group Stage - Turnamen</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
-        h1, h2, h3 { text-align: center; color: #2c3e50; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; }
-        input[type="number"], input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; }
-        .btn { background-color: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; display: inline-block; text-decoration: none; }
-        .btn:hover { background-color: #2980b9; }
-        .btn-danger { background-color: #e74c3c; }
-        .btn-danger:hover { background-color: #c0392b; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        table, th, td { border: 1px solid #ddd; }
-        th, td { padding: 12px; text-align: center; }
-        th { background-color: #f8f9fa; }
-        .match-box { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
-        select { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; }
+        .match-badge {
+            background: #3498db;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-right: 10px;
+        }
     </style>
 </head>
+
 <body>
-<div class="container">
-    <a href="{{ url_for('index') }}" class="btn" style="background: #95a5a6;">← Kembali ke Menu Utama</a>
-    <h2>📊 Mode Group Stage (Round Robin)</h2>
+    <div class="container">
+        <a href="{{ url_for('index') }}" class="btn" style="background: #95a5a6;">← Kembali</a>
+        <h1>📊 Mode Group Stage</h1>
 
-    {% if not group_teams %}
-        <div class="form-group">
-            <label for="group_count">Masukkan Jumlah Tim (Minimal 2):</label>
-            <input type="number" id="group_count" min="2" placeholder="Contoh: 4">
-            <button type="button" class="btn" onclick="generateTeamFields()">Buat Kolom Tim</button>
-        </div>
+        {% if error %}
+        <p style="color: red; text-align: center;">{{ error }}</p>
+        {% endif %}
 
-        <form action="{{ url_for('group_stage') }}" method="POST" id="form_group_teams" style="display: none; margin-top: 20px;">
-            <div id="group_inputs_container"></div>
+        {% if not teams %}
+        <h3>Pengaturan Group Stage</h3>
+        <form action="{{ url_for('group_stage') }}" method="POST">
+            <div style="margin-bottom: 15px;">
+                <label><strong>Jam Mulai Turnamen:</strong></label>
+                <input type="time" name="start_time" value="08:00" required style="padding: 8px; font-size: 1rem;">
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label><strong>Masukkan List Tim (1 Tim per baris):</strong></label>
+                <textarea name="teams" placeholder="Tim A&#10;Tim B&#10;Tim C&#10;Tim D" required></textarea>
+            </div>
+
             <button type="submit" class="btn">Generate Jadwal & Klasemen</button>
         </form>
-    {% else %}
-        <a href="{{ url_for('reset_group') }}" class="btn btn-danger" style="margin-bottom: 20px;">Reset Group Stage</a>
+        {% else %}
+        <div style="margin-bottom: 20px;">
+            <a href="{{ url_for('shuffle_group_matches') }}" class="btn" style="background: #e67e22;"
+                onclick="return confirm('Yakin ingin mengacak ulang jadwal jam pertandingan?')">
+                🔀 Acak Jadwal Match
+            </a>
+            <a href="{{ url_for('reset_group') }}" class="btn btn-danger"
+                onclick="return confirm('Yakin ingin mereset group stage?')">Reset Turnamen</a>
+        </div>
 
-        <h3>🏆 Klasemen Sementara</h3>
+        <h2>🏆 Klasemen Sementara</h2>
         <table>
             <thead>
                 <tr>
                     <th>Posisi</th>
                     <th>Tim</th>
+                    <th>Main</th>
+                    <th>Menang (✔)</th>
+                    <th>Kalah (✘)</th>
                     <th>Poin</th>
                 </tr>
             </thead>
             <tbody>
-                {% for team, points in group_standings %}
+                {% for item in standings %}
                 <tr>
                     <td>{{ loop.index }}</td>
-                    <td><strong>{{ team }}</strong></td>
-                    <td>{{ points }}</td>
+                    <td><strong>{{ item.team }}</strong></td>
+                    <td>{{ item.played }}</td>
+                    <td style="color: green; font-weight: bold;">{{ item.won }} ✔</td>
+                    <td style="color: red; font-weight: bold;">{{ item.lost }} ✘</td>
+                    <td><strong>{{ item.points }}</strong></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
 
-        <h3 style="margin-top: 30px;">📅 Jadwal Pertandingan</h3>
-        {% for match in group_matches %}
-            <div class="match-box">
-                <span><strong>{{ match.team1 }}</strong> vs <strong>{{ match.team2 }}</strong></span>
-                <form action="{{ url_for('update_group_match') }}" method="POST" style="margin: 0;">
-                    <input type="hidden" name="match_id" value="{{ match.id }}">
-                    <select name="winner" onchange="this.form.submit()">
-                        <option value="">-- Pilih Pemenang --</option>
-                        <option value="{{ match.team1 }}" {% if match.winner == match.team1 %}selected{% endif %}>{{ match.team1 }} Menang</option>
-                        <option value="{{ match.team2 }}" {% if match.winner == match.team2 %}selected{% endif %}>{{ match.team2 }} Menang</option>
-                    </select>
-                </form>
-            </div>
+        <h2 style="margin-top: 40px;">📅 Jadwal Pertandingan (2 Lapangan / Match Pararel)</h2>
+        {% for match in matches %}
+        <div class="match-box"
+            style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #f8f9fa;">
+            <span>
+                <span class="match-badge">⏰ {{ match.time_slot }}</span>
+                <strong>{{ match.team1 }}</strong>
+                {% if match.winner == match.team1 %}<span style="color: green;">(✔ Menang)</span>
+                {% elif match.winner == match.team2 %}<span style="color: red;">(✘ Kalah)</span>{% endif %}
+                vs
+                <strong>{{ match.team2 }}</strong>
+                {% if match.winner == match.team2 %}<span style="color: green;">(✔ Menang)</span>
+                {% elif match.winner == match.team1 %}<span style="color: red;">(✘ Kalah)</span>{% endif %}
+            </span>
+
+            <form action="{{ url_for('update_group_match') }}" method="POST" style="margin: 0;">
+                <input type="hidden" name="match_id" value="{{ match.id }}">
+                <select name="winner" onchange="this.form.submit()">
+                    <option value="">-- Pilih Pemenang --</option>
+                    <option value="{{ match.team1 }}" {% if match.winner==match.team1 %}selected{% endif %}>
+                        ✔ {{ match.team1 }} Menang
+                    </option>
+                    <option value="{{ match.team2 }}" {% if match.winner==match.team2 %}selected{% endif %}>
+                        ✔ {{ match.team2 }} Menang
+                    </option>
+                </select>
+            </form>
+        </div>
         {% endfor %}
-    {% endif %}
-</div>
-
-<script>
-    function generateTeamFields() {
-        const count = parseInt(document.getElementById('group_count').value);
-        if (isNaN(count) || count < 2) {
-            alert('Minimal masukkan 2 tim!');
-            return;
-        }
-
-        const container = document.getElementById('group_inputs_container');
-        const form = document.getElementById('form_group_teams');
-        container.innerHTML = '<h3>Nama-Nama Tim:</h3>';
-
-        for (let i = 1; i <= count; i++) {
-            const div = document.createElement('div');
-            div.className = 'form-group';
-            div.innerHTML = `
-                <label>Tim ${i}:</label>
-                <input type="text" name="teams" placeholder="Nama Tim ${i}" required>
-            `;
-            container.appendChild(div);
-        }
-        form.style.display = 'block';
-    }
-</script>
+        {% endif %}
+    </div>
 </body>
+
 </html>

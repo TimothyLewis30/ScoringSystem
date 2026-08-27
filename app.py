@@ -1,147 +1,258 @@
-import os
-from flask import Flask, render_template, request, redirect, url_for, session
-from functools import cmp_to_key
+from datetime import datetime, timedelta
 import random
+from flask import Flask, redirect, render_template, request, session, url_for
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+app.secret_key = "pingpong_tournament_secret_key"
 
+
+# ---------------- 1. ROUTE UTAMA ----------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+  return render_template("index.html")
 
-@app.route("/group-stage")
-def group_stage_view():
-    group_teams = session.get("group_teams", [])
-    group_matches = session.get("group_matches", [])
-    
-    standings = {team: 0 for team in group_teams}
-    for match in group_matches:
-        if match.get("winner"):
-            standings[match["winner"]] += 1
 
-    def compare_teams(team_a, team_b):
-        if standings[team_a] != standings[team_b]:
-            return standings[team_b] - standings[team_a]
-        for match in group_matches:
-            if match.get("winner"):
-                if (match["team1"] == team_a and match["team2"] == team_b) or \
-                   (match["team1"] == team_b and match["team2"] == team_a):
-                    if match["winner"] == team_a:
-                        return -1
-                    elif match["winner"] == team_b:
-                        return 1
-        return 0
+# ---------------- 2. LOGIC GROUP STAGE ----------------
+def generate_group_schedule(teams, start_time_str="08:00"):
+  # Buat semua pasangan match (Round Robin)
+  pairings = [
+      (teams[i], teams[j])
+      for i in range(len(teams))
+      for j in range(i + 1, len(teams))
+  ]
+  random.shuffle(pairings)
 
-    sorted_teams = sorted(group_teams, key=cmp_to_key(compare_teams))
-    group_standings = [(team, standings[team]) for team in sorted_teams]
+  # Penjadwalan: Maksimal 2 match per slot jam & cegah bentrok tim
+  slots = []
+  for match in pairings:
+    t1, t2 = match
+    placed = False
+    for slot in slots:
+      teams_in_slot = {m[0] for m in slot} | {m[1] for m in slot}
+      # Cek jika slot belum penuh (<2 match) DAN tim belum bertanding di slot ini
+      if len(slot) < 2 and t1 not in teams_in_slot and t2 not in teams_in_slot:
+        slot.append(match)
+        placed = True
+        break
+    if not placed:
+      slots.append([match])
 
-    return render_template(
-        "group-stage.html",
-        group_teams=group_teams,
-        group_matches=group_matches,
-        group_standings=group_standings
+  # Generate jam pertandingan (durasi 30 menit per slot)
+  start_dt = datetime.strptime(start_time_str, "%H:%M")
+  matches = []
+  match_id = 1
+
+  for slot_idx, slot in enumerate(slots):
+    match_start = start_dt + timedelta(minutes=30 * slot_idx)
+    match_end = match_start + timedelta(minutes=30)
+    time_slot = (
+        f"{match_start.strftime('%H:%M')} - {match_end.strftime('%H:%M')}"
     )
 
-@app.route("/group-stage", methods=["POST"])
-def group_stage():
-    teams = [t.strip() for t in request.form.getlist("teams") if t.strip()]
-    if len(teams) < 2:
-        return redirect(url_for("group_stage_view"))
+    for t1, t2 in slot:
+      matches.append({
+          "id": match_id,
+          "team1": t1,
+          "team2": t2,
+          "winner": None,
+          "time_slot": time_slot,
+      })
+      match_id += 1
 
-    matches = []
-    match_id = 1
-    for i in range(len(teams)):
-        for j in range(i + 1, len(teams)):
-            matches.append({"id": match_id, "team1": teams[i], "team2": teams[j], "winner": None})
-            match_id += 1
-            
-    session["group_teams"] = teams
-    session["group_matches"] = matches
-    return redirect(url_for("group_stage_view"))
+  return matches
+
+
+@app.route("/group-stage", methods=["GET", "POST"])
+def group_stage():
+  if request.method == "POST":
+    teams = [
+        t.strip()
+        for t in request.form.get("teams", "").split("\n")
+        if t.strip()
+    ]
+    start_time = request.form.get("start_time", "08:00")
+
+    if len(teams) < 2:
+      return render_template(
+          "group_stage.html", error="Minimal masukkan 2 tim!"
+      )
+
+    session.update({
+        "group_teams": teams,
+        "group_start_time": start_time,
+        "group_matches": generate_group_schedule(teams, start_time),
+    })
+    return redirect(url_for("group_stage"))
+
+  teams = session.get("group_teams", [])
+  matches = session.get("group_matches", [])
+
+  # Hitung Statistik Klasemen
+  stats = {
+      t: {"team": t, "played": 0, "won": 0, "lost": 0, "points": 0} for t in teams
+  }
+  for m in matches:
+    if m["winner"]:
+      w = m["winner"]
+      l = m["team2"] if m["winner"] == m["team1"] else m["team1"]
+      stats[w]["won"] += 1
+      stats[w]["points"] += 1
+      stats[l]["lost"] += 1
+      stats[w]["played"] += 1
+      stats[l]["played"] += 1
+
+  standings = sorted(
+      stats.values(), key=lambda x: (x["points"], x["won"]), reverse=True
+  )
+  return render_template(
+      "group_stage.html", teams=teams, matches=matches, standings=standings
+  )
+
+
+@app.route("/group-stage/shuffle")
+def shuffle_group_matches():
+  teams = session.get("group_teams", [])
+  start_time = session.get("group_start_time", "08:00")
+  if teams:
+    session["group_matches"] = generate_group_schedule(teams, start_time)
+    session.modified = True
+  return redirect(url_for("group_stage"))
+
 
 @app.route("/group-stage/update", methods=["POST"])
 def update_group_match():
-    match_id = int(request.form.get("match_id"))
-    winner = request.form.get("winner")
-    
-    matches = session.get("group_matches", [])
-    for match in matches:
-        if match["id"] == match_id:
-            match["winner"] = winner
-            break
-            
-    session["group_matches"] = matches
-    return redirect(url_for("group_stage_view"))
+  matches = session.get("group_matches", [])
+  match_id = int(request.form.get("match_id"))
+  winner = request.form.get("winner")
+
+  for m in matches:
+    if m["id"] == match_id:
+      m["winner"] = winner if winner != "" else None
+      break
+
+  session["group_matches"] = matches
+  session.modified = True
+  return redirect(url_for("group_stage"))
+
 
 @app.route("/group-stage/reset")
 def reset_group():
-    session.pop("group_teams", None)
-    session.pop("group_matches", None)
-    return redirect(url_for("group_stage_view"))
+  for k in ["group_teams", "group_matches", "group_start_time"]:
+    session.pop(k, None)
+  return redirect(url_for("group_stage"))
 
-@app.route("/elimination")
-def elimination_view():
-    elim_rounds = session.get("elim_rounds", [])
-    elim_champion = session.get("elim_champion", None)
-    return render_template("elimination.html", elim_rounds=elim_rounds, elim_champion=elim_champion)
 
-@app.route("/elimination", methods=["POST"])
+# ---------------- 3. LOGIC ELIMINASI ----------------
+def make_bracket(teams):
+  random.shuffle(teams)
+  return [
+      {
+          "team1": teams[i],
+          "team2": teams[i + 1] if i + 1 < len(teams) else "Lolos Otomatis",
+          "winner": teams[i] if i + 1 >= len(teams) else None,
+          "sets_won": {"team1": 0, "team2": 0},
+          "set_details": [],  # Menyimpan detail skor per set misal [{'t1': 11, 't2': 9}]
+      }
+      for i in range(0, len(teams), 2)
+  ]
+
+@app.route("/elimination", methods=["GET", "POST"])
 def elimination():
-    teams_raw = request.form.get("teams", "")
-    teams = [t.strip() for t in teams_raw.split("\n") if t.strip()]
+  if request.method == "POST":
+    teams = [
+        t.strip()
+        for t in request.form.get("teams", "").split("\n")
+        if t.strip()
+    ]
+    match_format = int(request.form.get("match_format", 3))
 
     if len(teams) < 2:
-        return redirect(url_for("elimination_view"))
+      return render_template(
+          "elimination.html", error="Minimal masukkan 2 tim!"
+      )
 
-    random.shuffle(teams)
-    matches = []
-    for i in range(0, len(teams), 2):
-        if i + 1 < len(teams):
-            matches.append({"team1": teams[i], "team2": teams[i+1], "winner": None})
-        else:
-            matches.append({"team1": teams[i], "team2": "BYE", "winner": teams[i]})
+    session.update({
+        "elim_raw": teams,
+        "elim_fmt": match_format,
+        "elim_rounds": [make_bracket(teams)],
+        "elim_champion": None,
+    })
+    return redirect(url_for("elimination"))
 
-    session["elim_rounds"] = [matches]
-    session["elim_champion"] = None
-    return redirect(url_for("elimination_view"))
+  return render_template(
+      "elimination.html",
+      rounds=session.get("elim_rounds", []),
+      champion=session.get("elim_champion"),
+      match_format=session.get("elim_fmt", 3),
+  )
+
+
+@app.route("/elimination/shuffle")
+def shuffle_elimination():
+  if session.get("elim_raw"):
+    session.update({
+        "elim_rounds": [make_bracket(session["elim_raw"])],
+        "elim_champion": None,
+    })
+    session.modified = True
+  return redirect(url_for("elimination"))
+
 
 @app.route("/elimination/advance", methods=["POST"])
 def advance_elimination():
-    rounds = session.get("elim_rounds", [])
-    if not rounds:
-        return redirect(url_for("elimination_view"))
+  rounds = session.get("elim_rounds", [])
+  idx = int(request.form.get("match_idx", -1))
+  fmt = session.get("elim_fmt", 3)
 
-    current_round = rounds[-1]
-    winners = []
-    for i, match in enumerate(current_round):
-        selected_winner = request.form.get(f"winner_{i}")
-        winner_name = match["team2"] if match["team2"] == "BYE" else selected_winner
-        match["winner"] = winner_name
-        if winner_name:
-            winners.append(winner_name)
+  if rounds and 0 <= idx < len(rounds[-1]):
+    m = rounds[-1][idx]
+    t1_sets = 0
+    t2_sets = 0
+    set_details = []
 
-    if len(winners) == len(current_round):
-        if len(winners) == 1:
-            session["elim_champion"] = winners[0]
-        else:
-            next_round = []
-            for i in range(0, len(winners), 2):
-                if i + 1 < len(winners):
-                    next_round.append({"team1": winners[i], "team2": winners[i+1], "winner": None})
-                else:
-                    next_round.append({"team1": winners[i], "team2": "BYE", "winner": winners[i]})
-            rounds.append(next_round)
+    for i in range(1, fmt + 1):
+      s1 = int(request.form.get(f"set_{i}_t1") or 0)
+      s2 = int(request.form.get(f"set_{i}_t2") or 0)
 
-    session["elim_rounds"] = rounds
-    return redirect(url_for("elimination_view"))
+      # Catat detail skor jika set dimainkan
+      if s1 > 0 or s2 > 0:
+        set_details.append({"t1": s1, "t2": s2})
+
+        # Aturan menang set pingpong (min 11 poin & selisih 2)
+        if (s1 >= 11 or s2 >= 11) and abs(s1 - s2) >= 2:
+          if s1 > s2:
+            t1_sets += 1
+          else:
+            t2_sets += 1
+
+    m["set_details"] = set_details
+    m["sets_won"] = {"team1": t1_sets, "team2": t2_sets}
+    m["winner"] = (
+        m["team1"]
+        if t1_sets > t2_sets
+        else (m["team2"] if t2_sets > t1_sets else None)
+    )
+
+  # Cek jika seluruh match pada babak ini selesai, buat babak berikutnya
+  if rounds and all(m["winner"] for m in rounds[-1]):
+    winners = [m["winner"] for m in rounds[-1]]
+    if len(winners) == 1:
+      session["elim_champion"] = winners[0]
+    else:
+      rounds.append(make_bracket(winners))
+
+  session["elim_rounds"] = rounds
+  session.modified = True
+  return redirect(url_for("elimination"))
+
+
 
 @app.route("/elimination/reset")
 def reset_elimination():
-    session.pop("elim_rounds", None)
-    session.pop("elim_champion", None)
-    return redirect(url_for("elimination_view"))
+  for k in ["elim_raw", "elim_fmt", "elim_rounds", "elim_champion"]:
+    session.pop(k, None)
+  return redirect(url_for("elimination"))
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+  app.run(debug=True)

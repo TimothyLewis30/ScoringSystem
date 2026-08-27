@@ -93,7 +93,9 @@ def reset_group():
 
 @app.route("/elimination", methods=["POST"])
 def elimination():
-    teams = [t.strip() for t in request.form.getlist("teams") if t.strip()]
+    # Membaca input teks dari textarea dan memisahkan berdasarkan baris baru (\n)
+    teams_raw = request.form.get("teams", "")
+    teams = [t.strip() for t in teams_raw.split("\n") if t.strip()]
 
     if len(teams) < 2:
         return redirect(url_for("index"))

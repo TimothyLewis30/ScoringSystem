@@ -100,6 +100,7 @@
             cursor: pointer;
             font-weight: bold;
             display: inline-block;
+            text-decoration: none;
         }
 
         .btn:hover {
@@ -237,6 +238,7 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+            </thead>
             </table>
 
             <h3 style="margin-top: 30px;">📅 Jadwal Pertandingan</h3>
@@ -273,19 +275,7 @@
             </div>
             {% endif %}
 
-            {% if not elim_rounds %}
-            <div class="form-group">
-                <label for="elim_count">Masukkan Jumlah Tim (Minimal 2):</label>
-                <input type="number" id="elim_count" min="2" placeholder="Contoh: 8">
-                <button type="button" class="btn" onclick="generateTeamFields('elim')">Buat Kolom Tim</button>
-            </div>
-
-            <form action="{{ url_for('elimination') }}" method="POST" id="form_elim_teams"
-                style="display: none; margin-top: 20px;">
-                <div id="elim_inputs_container"></div>
-                <button type="submit" class="btn">Buat Braket Turnamen</button>
-            </form>
-            {% else %}
+            {% if elim_rounds %}
             <a href="{{ url_for('reset_elimination') }}" class="btn btn-danger" style="margin-bottom: 20px;">Reset
                 Eliminasi</a>
 

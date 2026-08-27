@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eliminasi</title>
+    <title>Eliminasi - Pingpong Scoreboard</title>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
@@ -12,17 +12,28 @@
         textarea { width: 100%; height: 120px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; resize: vertical; }
         .btn { background-color: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; display: inline-block; text-decoration: none; }
         .btn:hover { background-color: #2980b9; }
+        .btn-success { background-color: #2ecc71; }
+        .btn-success:hover { background-color: #27ae60; }
         .btn-danger { background-color: #e74c3c; }
         .btn-danger:hover { background-color: #c0392b; }
         .match-box { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
-        select { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; }
         .champion-box { background: #2ecc71; color: white; padding: 20px; border-radius: 8px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; }
+        
+        /* Modal Scoreboard Styles */
+        #scoreModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: white; z-index: 1000; flex-direction: column; justify-content: center; align-items: center; }
+        .score-container { display: flex; gap: 50px; text-align: center; margin-bottom: 30px; }
+        .player-box { background: #2c3e50; padding: 30px; border-radius: 12px; min-width: 250px; }
+        .player-name { font-size: 24px; font-weight: bold; margin-bottom: 15px; }
+        .score-display { font-size: 80px; font-weight: bold; margin-bottom: 20px; color: #f1c40f; }
+        .score-btn { background: #e74c3c; color: white; font-size: 24px; padding: 15px 40px; border: none; border-radius: 8px; cursor: pointer; width: 100%; }
+        .score-btn:hover { background: #c0392b; }
+        .close-btn { position: absolute; top: 20px; right: 30px; font-size: 20px; background: #95a5a6; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; color: white; }
     </style>
 </head>
 <body>
 <div class="container">
     <a href="{{ url_for('index') }}" class="btn" style="background: #95a5a6;">← Kembali ke Menu Utama</a>
-    <h2>⚔️ Mode Eliminasi (Sistem Gugur)</h2>
+    <h2>⚔️ Mode Eliminasi Pingpong</h2>
 
     {% if elim_champion %}
         <div class="champion-box">
@@ -31,9 +42,9 @@
     {% endif %}
 
     {% if not elim_rounds %}
-        <h3>Masukkan Daftar Tim (1 Tim per baris)</h3>
+        <h3>Masukkan Daftar Pemain (1 Nama per baris)</h3>
         <form action="{{ url_for('elimination') }}" method="POST">
-            <textarea name="teams" placeholder="Tim A&#10;Tim B&#10;Tim C&#10;Tim D" required></textarea>
+            <textarea name="teams" placeholder="Pemain A&#10;Pemain B&#10;Pemain C&#10;Pemain D" required></textarea>
             <button type="submit" class="btn">Buat Braket Turnamen</button>
         </form>
     {% else %}
@@ -41,31 +52,138 @@
 
         {% for round_matches in elim_rounds %}
             <h3>Babak {{ loop.index }}</h3>
-            <form action="{{ url_for('advance_elimination') }}" method="POST">
+            <form action="{{ url_for('advance_elimination') }}" method="POST" id="advanceForm">
                 {% for match in round_matches %}
                     <div class="match-box">
                         <span><strong>{{ match.team1 }}</strong> vs <strong>{{ match.team2 }}</strong></span>
+                        
                         {% if match.winner %}
                             <span style="color: #27ae60; font-weight: bold;">Pemenang: {{ match.winner }}</span>
+                            <input type="hidden" name="winner_{{ loop.index0 }}" value="{{ match.winner }}">
                         {% elif match.team2 == 'BYE' %}
                             <span style="color: #7f8c8d;">Lolos Otomatis (BYE)</span>
                         {% else %}
-                            <select name="winner_{{ loop.index0 }}" required>
-                                <option value="">-- Pilih Pemenang --</option>
-                                <option value="{{ match.team1 }}">{{ match.team1 }}</option>
-                                <option value="{{ match.team2 }}">{{ match.team2 }}</option>
-                            </select>
+                            <!-- Hidden input untuk menyimpan pemenang yang dikirim oleh JS -->
+                            <input type="hidden" name="winner_{{ loop.index0 }}" id="winner_input_{{ loop.index0 }}" value="">
+                            
+                            <span id="winner_text_{{ loop.index0 }}" style="color: #e67e22; font-weight: bold;"></span>
+                            <button type="button" class="btn btn-success" id="btn_match_{{ loop.index0 }}" onclick="openScoreboard('{{ match.team1 }}', '{{ match.team2 }}', {{ loop.index0 }})">🏓 Mulai Match</button>
                         {% endif %}
                     </div>
                 {% endfor %}
 
                 {% if loop.last and not elim_champion %}
-                    <button type="submit" class="btn" style="margin-top: 15px;">Lanjut ke Babak Berikutnya →</button>
+                    <button type="submit" class="btn" style="margin-top: 15px; width: 100%;">Lanjut ke Babak Berikutnya →</button>
                 {% endif %}
             </form>
             <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
         {% endfor %}
     {% endif %}
 </div>
+
+<!-- Modal Scoreboard Pingpong -->
+<div id="scoreModal">
+    <button class="close-btn" onclick="closeScoreboard()">Tutup Batal</button>
+    <h2 style="color: white; margin-bottom: 40px; font-size: 30px;">Live Score Pingpong</h2>
+    
+    <div class="score-container">
+        <div class="player-box">
+            <div class="player-name" id="name1">Pemain 1</div>
+            <div class="score-display" id="score1">0</div>
+            <button class="score-btn" onclick="addScore(1)">+1 Poin</button>
+            <button class="btn" style="margin-top: 10px; background: #7f8c8d;" onclick="minScore(1)">-1</button>
+        </div>
+        
+        <div style="font-size: 50px; font-weight: bold; align-self: center;">VS</div>
+        
+        <div class="player-box">
+            <div class="player-name" id="name2">Pemain 2</div>
+            <div class="score-display" id="score2">0</div>
+            <button class="score-btn" onclick="addScore(2)">+1 Poin</button>
+            <button class="btn" style="margin-top: 10px; background: #7f8c8d;" onclick="minScore(2)">-1</button>
+        </div>
+    </div>
+    
+    <h3 id="deuceWarning" style="color: #e74c3c; display: none;">🔥 DEUCE! Cari Selisih 2 Poin 🔥</h3>
+</div>
+
+<script>
+    let p1Score = 0;
+    let p2Score = 0;
+    let p1Name = "";
+    let p2Name = "";
+    let currentMatchIndex = -1;
+
+    function openScoreboard(team1, team2, matchIndex) {
+        p1Name = team1;
+        p2Name = team2;
+        currentMatchIndex = matchIndex;
+        
+        p1Score = 0;
+        p2Score = 0;
+        
+        document.getElementById('name1').innerText = p1Name;
+        document.getElementById('name2').innerText = p2Name;
+        updateDisplay();
+        
+        document.getElementById('scoreModal').style.display = 'flex';
+    }
+
+    function closeScoreboard() {
+        document.getElementById('scoreModal').style.display = 'none';
+    }
+
+    function updateDisplay() {
+        document.getElementById('score1').innerText = p1Score;
+        document.getElementById('score2').innerText = p2Score;
+        
+        // Deteksi Deuce (10 - 10 atau lebih)
+        if (p1Score >= 10 && p2Score >= 10 && p1Score === p2Score) {
+            document.getElementById('deuceWarning').style.display = 'block';
+        } else {
+            document.getElementById('deuceWarning').style.display = 'none';
+        }
+    }
+
+    function addScore(playerNum) {
+        if (playerNum === 1) p1Score++;
+        else p2Score++;
+        
+        updateDisplay();
+        checkWinner();
+    }
+
+    function minScore(playerNum) {
+        if (playerNum === 1 && p1Score > 0) p1Score--;
+        else if (playerNum === 2 && p2Score > 0) p2Score--;
+        updateDisplay();
+    }
+
+    function checkWinner() {
+        let winner = null;
+        
+        // Logika Pingpong: Capai 11 poin dan selisih minimal 2 poin
+        if (p1Score >= 11 && (p1Score - p2Score >= 2)) {
+            winner = p1Name;
+        } else if (p2Score >= 11 && (p2Score - p1Score >= 2)) {
+            winner = p2Name;
+        }
+
+        if (winner) {
+            setTimeout(() => {
+                alert("🎉 " + winner + " memenangkan pertandingan!");
+                
+                // Set value di hidden input form utama
+                document.getElementById('winner_input_' + currentMatchIndex).value = winner;
+                
+                // Ubah tampilan match box
+                document.getElementById('winner_text_' + currentMatchIndex).innerText = "Menunggu Submit: " + winner;
+                document.getElementById('btn_match_' + currentMatchIndex).style.display = "none";
+                
+                closeScoreboard();
+            }, 100);
+        }
+    }
+</script>
 </body>
 </html>

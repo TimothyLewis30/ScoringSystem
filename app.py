@@ -4,13 +4,14 @@ from functools import cmp_to_key
 import random
 
 app = Flask(__name__)
-
-# Mengambil SECRET_KEY dari Environment Variable di Render.
-# Jika tidak ada di env (misal saat dijalankan lokal), akan membuat key acak secara otomatis.
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24).hex())
 
 @app.route("/")
 def index():
+    return render_template("index.html")
+
+@app.route("/group-stage")
+def group_stage_view():
     group_teams = session.get("group_teams", [])
     group_matches = session.get("group_matches", [])
     
@@ -22,7 +23,6 @@ def index():
     def compare_teams(team_a, team_b):
         if standings[team_a] != standings[team_b]:
             return standings[team_b] - standings[team_a]
-            
         for match in group_matches:
             if match.get("winner"):
                 if (match["team1"] == team_a and match["team2"] == team_b) or \
@@ -36,40 +36,29 @@ def index():
     sorted_teams = sorted(group_teams, key=cmp_to_key(compare_teams))
     group_standings = [(team, standings[team]) for team in sorted_teams]
 
-    elim_rounds = session.get("elim_rounds", [])
-    elim_champion = session.get("elim_champion", None)
-
     return render_template(
-        "index.html",
+        "group-stage.html",
         group_teams=group_teams,
         group_matches=group_matches,
-        group_standings=group_standings,
-        elim_rounds=elim_rounds,
-        elim_champion=elim_champion
+        group_standings=group_standings
     )
 
 @app.route("/group-stage", methods=["POST"])
 def group_stage():
     teams = [t.strip() for t in request.form.getlist("teams") if t.strip()]
-    
     if len(teams) < 2:
-        return redirect(url_for("index"))
+        return redirect(url_for("group_stage_view"))
 
     matches = []
     match_id = 1
     for i in range(len(teams)):
         for j in range(i + 1, len(teams)):
-            matches.append({
-                "id": match_id,
-                "team1": teams[i],
-                "team2": teams[j],
-                "winner": None
-            })
+            matches.append({"id": match_id, "team1": teams[i], "team2": teams[j], "winner": None})
             match_id += 1
             
     session["group_teams"] = teams
     session["group_matches"] = matches
-    return redirect(url_for("index"))
+    return redirect(url_for("group_stage_view"))
 
 @app.route("/group-stage/update", methods=["POST"])
 def update_group_match():
@@ -83,22 +72,27 @@ def update_group_match():
             break
             
     session["group_matches"] = matches
-    return redirect(url_for("index"))
+    return redirect(url_for("group_stage_view"))
 
 @app.route("/group-stage/reset")
 def reset_group():
     session.pop("group_teams", None)
     session.pop("group_matches", None)
-    return redirect(url_for("index"))
+    return redirect(url_for("group_stage_view"))
+
+@app.route("/elimination")
+def elimination_view():
+    elim_rounds = session.get("elim_rounds", [])
+    elim_champion = session.get("elim_champion", None)
+    return render_template("elimination.html", elim_rounds=elim_rounds, elim_champion=elim_champion)
 
 @app.route("/elimination", methods=["POST"])
 def elimination():
-    # Membaca input teks dari textarea dan memisahkan berdasarkan baris baru (\n)
     teams_raw = request.form.get("teams", "")
     teams = [t.strip() for t in teams_raw.split("\n") if t.strip()]
 
     if len(teams) < 2:
-        return redirect(url_for("index"))
+        return redirect(url_for("elimination_view"))
 
     random.shuffle(teams)
     matches = []
@@ -110,13 +104,13 @@ def elimination():
 
     session["elim_rounds"] = [matches]
     session["elim_champion"] = None
-    return redirect(url_for("index"))
+    return redirect(url_for("elimination_view"))
 
 @app.route("/elimination/advance", methods=["POST"])
 def advance_elimination():
     rounds = session.get("elim_rounds", [])
     if not rounds:
-        return redirect(url_for("index"))
+        return redirect(url_for("elimination_view"))
 
     current_round = rounds[-1]
     winners = []
@@ -140,13 +134,13 @@ def advance_elimination():
             rounds.append(next_round)
 
     session["elim_rounds"] = rounds
-    return redirect(url_for("index"))
+    return redirect(url_for("elimination_view"))
 
 @app.route("/elimination/reset")
 def reset_elimination():
     session.pop("elim_rounds", None)
     session.pop("elim_champion", None)
-    return redirect(url_for("index"))
+    return redirect(url_for("elimination_view"))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

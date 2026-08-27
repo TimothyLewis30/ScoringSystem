@@ -1,524 +1,71 @@
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eliminasi - Braket Pingpong</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Eliminasi</title>
     <style>
-        .bracket-container {
-            display: flex;
-            overflow-x: auto;
-            gap: 20px;
-            padding: 20px 0;
-        }
-
-        .bracket-column {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-around;
-            min-width: 260px;
-        }
-
-        .match-card {
-            border: 2px solid #bdc3c7;
-            border-radius: 8px;
-            background-color: #f8f9fa;
-            padding: 10px;
-            margin: 10px 0;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .match-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-            border-color: #3498db;
-        }
-
-        .match-card.completed {
-            cursor: default;
-        }
-
-        .team-row {
-            padding: 6px 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-radius: 4px;
-        }
-
-        .team-row.winner {
-            background-color: #2ecc71;
-            color: white;
-            font-weight: bold;
-        }
-
-        .score-badge {
-            font-weight: bold;
-            padding: 2px 6px;
-            background: #e0e0e0;
-            border-radius: 4px;
-            color: #333;
-        }
-
-        .team-row.winner .score-badge {
-            background: #fff;
-            color: #2ecc71;
-        }
-
-        .set-history {
-            font-size: 0.75rem;
-            color: #7f8c8d;
-            text-align: center;
-            margin-top: 6px;
-            padding-top: 4px;
-            border-top: 1px dashed #ddd;
-            display: flex;
-            justify-content: center;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-
-        .set-pill {
-            background: #eef2f3;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-            border: 1px solid #dcdde1;
-        }
-
-        .champion-box {
-            background: #f1c40f;
-            color: #2c3e50;
-            padding: 15px;
-            text-align: center;
-            font-size: 1.5rem;
-            font-weight: bold;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        /* MODAL MATCH MAIN */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-        }
-
-        .modal-content {
-            background-color: #fff;
-            margin: 5% auto;
-            padding: 20px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 500px;
-        }
-
-        .close-btn {
-            float: right;
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .sets-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-
-        .sets-table th,
-        .sets-table td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: center;
-            font-size: 0.9rem;
-        }
-
-        .btn-live-set {
-            background: #e67e22;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .btn-live-set:hover {
-            background: #d35400;
-        }
-
-        /* ==========================================
-           FULLSCREEN LIVE SCOREBOARD OVERLAY (1 LAYAR)
-           ========================================== */
-        .fullscreen-overlay {
-            display: none;
-            position: fixed;
-            z-index: 2000;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #1e272e;
-            color: white;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        .fs-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #34495e;
-            padding-bottom: 10px;
-        }
-
-        .fs-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #f1c40f;
-        }
-
-        .fs-status {
-            font-size: 1.2rem;
-            background: #e74c3c;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-weight: bold;
-        }
-
-        .fs-scoreboard {
-            display: flex;
-            height: 65vh;
-            gap: 15px;
-            margin: 15px 0;
-        }
-
-        .fs-player-card {
-            flex: 1;
-            background: #2c3e50;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-        }
-
-        .fs-player-name {
-            font-size: 2rem;
-            font-weight: bold;
-            text-align: center;
-            color: #ecf0f1;
-        }
-
-        .fs-digital-score {
-            font-size: 8rem;
-            font-weight: bold;
-            font-family: 'Courier New', Courier, monospace;
-            color: #f1c40f;
-            line-height: 1;
-        }
-
-        .fs-controls {
-            display: flex;
-            gap: 15px;
-            width: 100%;
-        }
-
-        .btn-fs-score {
-            flex: 1;
-            height: 70px;
-            font-size: 2.5rem;
-            font-weight: bold;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            color: white;
-            transition: background 0.1s;
-        }
-
-        .btn-fs-add {
-            background: #2ecc71;
-        }
-
-        .btn-fs-add:active {
-            background: #27ae60;
-        }
-
-        .btn-fs-sub {
-            background: #e74c3c;
-        }
-
-        .btn-fs-sub:active {
-            background: #c0392b;
-        }
-
-        .fs-footer {
-            display: flex;
-            gap: 15px;
-        }
-
-        .btn-fs-action {
-            flex: 1;
-            padding: 15px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        h1, h2, h3 { text-align: center; color: #2c3e50; }
+        textarea { width: 100%; height: 120px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; resize: vertical; }
+        .btn { background-color: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; display: inline-block; text-decoration: none; }
+        .btn:hover { background-color: #2980b9; }
+        .btn-danger { background-color: #e74c3c; }
+        .btn-danger:hover { background-color: #c0392b; }
+        .match-box { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+        select { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; }
+        .champion-box { background: #2ecc71; color: white; padding: 20px; border-radius: 8px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; }
     </style>
 </head>
-
 <body>
-    <div class="container">
-        <a href="{{ url_for('index') }}" class="btn" style="background: #95a5a6;">← Kembali</a>
-        <h1>🏓 Mode Eliminasi Pingpong</h1>
+<div class="container">
+    <a href="{{ url_for('index') }}" class="btn" style="background: #95a5a6;">← Kembali ke Menu Utama</a>
+    <h2>⚔️ Mode Eliminasi (Sistem Gugur)</h2>
 
-        {% if champion %}
-        <div class="champion-box">🎉 JUARA TURNAMEN: {{ champion }} 🎉</div>
-        {% endif %}
+    {% if elim_champion %}
+        <div class="champion-box">
+            🎉 JUARA TURNAMEN: {{ elim_champion }} 🎉
+        </div>
+    {% endif %}
 
-        {% if not rounds %}
-        <h3>Pengaturan Turnamen</h3>
+    {% if not elim_rounds %}
+        <h3>Masukkan Daftar Tim (1 Tim per baris)</h3>
         <form action="{{ url_for('elimination') }}" method="POST">
-            <div style="margin-bottom: 15px;">
-                <label><strong>Format Pertandingan:</strong></label>
-                <select name="match_format" style="width: 100%; padding: 8px; margin-top: 5px; font-size: 1rem;"
-                    required>
-                    <option value="3">Best of 3 (Mencapai 2 Kemenangan Set)</option>
-                    <option value="5">Best of 5 (Mencapai 3 Kemenangan Set)</option>
-                </select>
-            </div>
-            <div style="margin-bottom: 15px;">
-                <label><strong>Daftar Tim / Pemain (1 Nama per Baris):</strong></label>
-                <textarea name="teams" placeholder="Pemain A&#10;Pemain B&#10;Pemain C&#10;Pemain D"
-                    style="margin-top: 5px;" required></textarea>
-            </div>
+            <textarea name="teams" placeholder="Tim A&#10;Tim B&#10;Tim C&#10;Tim D" required></textarea>
             <button type="submit" class="btn">Buat Braket Turnamen</button>
         </form>
-        {% else %}
-        <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
-            <a href="{{ url_for('shuffle_elimination') }}" class="btn" style="background: #e67e22;"
-                onclick="return confirm('Acak ulang tim?')">🔀 Acak Ulang Tim</a>
-            <a href="{{ url_for('reset_elimination') }}" class="btn btn-danger"
-                onclick="return confirm('Reset turnamen?')">Reset Turnamen</a>
-            <span
-                style="font-weight: bold; background: #e8f8f5; color: #16a085; padding: 6px 12px; border-radius: 5px;">Format:
-                Best of {{ match_format }}</span>
-        </div>
+    {% else %}
+        <a href="{{ url_for('reset_elimination') }}" class="btn btn-danger" style="margin-bottom: 20px;">Reset Eliminasi</a>
 
-        <!-- Visual Braket -->
-        <div class="bracket-container">
-            {% for round_idx in range(rounds|length) %}
-            {% set round_matches = rounds[round_idx] %}
-            <div class="bracket-column">
-                <h3 style="text-align: center;">Babak {{ round_idx + 1 }}</h3>
-                {% for match_idx in range(round_matches|length) %}
-                {% set match = round_matches[match_idx] %}
-                <div class="match-card {% if match.winner %}completed{% endif %}" {% if not match.winner and
-                    round_idx==(rounds|length - 1) and match.team2 !='Lolos Otomatis' %}
-                    onclick="openMatchModal('{{ match_idx }}', '{{ match.team1 }}', '{{ match.team2 }}')" {% endif %}>
-
-                    <div class="team-row {% if match.winner == match.team1 %}winner{% endif %}">
-                        <span>{{ match.team1 }}</span>
-                        {% if match.sets_won %}<span class="score-badge">{{ match.sets_won.team1 }}</span>{% endif %}
-                    </div>
-                    <hr style="margin: 3px 0; border: 0.5px solid #eee;">
-                    <div class="team-row {% if match.winner == match.team2 %}winner{% endif %}">
-                        <span>{{ match.team2 }}</span>
-                        {% if match.sets_won %}<span class="score-badge">{{ match.sets_won.team2 }}</span>{% endif %}
-                    </div>
-
-                    {% if match.set_details %}
-                    <div class="set-history">
-                        {% for detail in match.set_details %}
-                        <span class="set-pill">S{{ loop.index }}: {{ detail.t1 }}-{{ detail.t2 }}</span>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- 1. MODAL RINGKASAN MATCH -->
-    <div id="matchModal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="closeMatchModal()">&times;</span>
-            <h3 style="margin: 0; text-align: center;">Input Skor Pertandingan</h3>
-            <p style="text-align: center; color: #7f8c8d; font-weight: bold; margin-top: 5px;" id="modal_match_title">
-            </p>
-
+        {% for round_matches in elim_rounds %}
+            <h3>Babak {{ loop.index }}</h3>
             <form action="{{ url_for('advance_elimination') }}" method="POST">
-                <input type="hidden" name="match_idx" id="modal_match_idx">
+                {% for match in round_matches %}
+                    <div class="match-box">
+                        <span><strong>{{ match.team1 }}</strong> vs <strong>{{ match.team2 }}</strong></span>
+                        {% if match.winner %}
+                            <span style="color: #27ae60; font-weight: bold;">Pemenang: {{ match.winner }}</span>
+                        {% elif match.team2 == 'BYE' %}
+                            <span style="color: #7f8c8d;">Lolos Otomatis (BYE)</span>
+                        {% else %}
+                            <select name="winner_{{ loop.index0 }}" required>
+                                <option value="">-- Pilih Pemenang --</option>
+                                <option value="{{ match.team1 }}">{{ match.team1 }}</option>
+                                <option value="{{ match.team2 }}">{{ match.team2 }}</option>
+                            </select>
+                        {% endif %}
+                    </div>
+                {% endfor %}
 
-                <table class="sets-table">
-                    <thead>
-                        <tr>
-                            <th>Set</th>
-                            <th id="th_t1">Tim 1</th>
-                            <th id="th_t2">Tim 2</th>
-                            <th>Aksi Live Score</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sets_table_body"></tbody>
-                </table>
-
-                <button type="submit" class="btn"
-                    style="width: 100%; margin-top: 20px; background: #27ae60; font-size: 1.1rem;">
-                    💾 Simpan Rekap Pertandingan Final
-                </button>
+                {% if loop.last and not elim_champion %}
+                    <button type="submit" class="btn" style="margin-top: 15px;">Lanjut ke Babak Berikutnya →</button>
+                {% endif %}
             </form>
-        </div>
-    </div>
-
-    <!-- 2. POP-UP FULLSCREEN LIVE SCORE (HAMPIR 1 LAYAR PENUH) -->
-    <div id="fullscreenOverlay" class="fullscreen-overlay">
-        <div class="fs-header">
-            <div class="fs-title" id="fs_set_title">LIVE SCORE - SET 1</div>
-            <div class="fs-status" id="fs_match_status">BERJALAN</div>
-        </div>
-
-        <div class="fs-scoreboard">
-            <!-- Papan Tim 1 -->
-            <div class="fs-player-card">
-                <div class="fs-player-name" id="fs_t1_name">Tim 1</div>
-                <div class="fs-digital-score" id="fs_t1_score">0</div>
-                <div class="fs-controls">
-                    <button type="button" class="btn-fs-score btn-fs-sub" onclick="adjustFsScore('t1', -1)">-</button>
-                    <button type="button" class="btn-fs-score btn-fs-add" onclick="adjustFsScore('t1', 1)">+</button>
-                </div>
-            </div>
-
-            <!-- Papan Tim 2 -->
-            <div class="fs-player-card">
-                <div class="fs-player-name" id="fs_t2_name">Tim 2</div>
-                <div class="fs-digital-score" id="fs_t2_score">0</div>
-                <div class="fs-controls">
-                    <button type="button" class="btn-fs-score btn-fs-sub" onclick="adjustFsScore('t2', -1)">-</button>
-                    <button type="button" class="btn-fs-score btn-fs-add" onclick="adjustFsScore('t2', 1)">+</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="fs-footer">
-            <button type="button" class="btn-fs-action" style="background: #95a5a6; color: white;"
-                onclick="closeFullscreenLive()">Batal / Kembali</button>
-            <button type="button" class="btn-fs-action" style="background: #27ae60; color: white;"
-                onclick="saveFullscreenSet()">✔ KUNCI & SIMPAN SET</button>
-        </div>
-    </div>
-
-    <script>
-        const matchFormat = parseInt("{{ match_format|default(3) }}");
-        let activeTeam1 = "", activeTeam2 = "";
-        let activeSetNum = 1;
-
-        function openMatchModal(matchIdx, team1, team2) {
-            activeTeam1 = team1;
-            activeTeam2 = team2;
-
-            document.getElementById('modal_match_idx').value = matchIdx;
-            document.getElementById('modal_match_title').innerText = `${team1} VS ${team2}`;
-            document.getElementById('th_t1').innerText = team1;
-            document.getElementById('th_t2').innerText = team2;
-
-            const tbody = document.getElementById('sets_table_body');
-            tbody.innerHTML = '';
-
-            for (let i = 1; i <= matchFormat; i++) {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>Set ${i}</strong></td>
-                    <td><input type="number" name="set_${i}_t1" id="input_set_${i}_t1" value="0" min="0" style="width: 50px; text-align: center; font-weight: bold;"></td>
-                    <td><input type="number" name="set_${i}_t2" id="input_set_${i}_t2" value="0" min="0" style="width: 50px; text-align: center; font-weight: bold;"></td>
-                    <td>
-                        <button type="button" class="btn-live-set" onclick="launchFullscreenLive(${i})">🔴 Live Score Set ${i}</button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            }
-
-            document.getElementById('matchModal').style.display = 'block';
-        }
-
-        // Buka Pop-up Live Score Fullscreen per Set
-        function launchFullscreenLive(setNum) {
-            activeSetNum = setNum;
-            document.getElementById('fs_set_title').innerText = `🔴 LIVE SCOREBOARD - SET ${setNum}`;
-            document.getElementById('fs_t1_name').innerText = activeTeam1;
-            document.getElementById('fs_t2_name').innerText = activeTeam2;
-
-            // Ambil nilai existing jika ada
-            const currentT1 = parseInt(document.getElementById(`input_set_${setNum}_t1`).value) || 0;
-            const currentT2 = parseInt(document.getElementById(`input_set_${setNum}_t2`).value) || 0;
-
-            document.getElementById('fs_t1_score').innerText = currentT1;
-            document.getElementById('fs_t2_score').innerText = currentT2;
-
-            checkFsStatus(currentT1, currentT2);
-            document.getElementById('fullscreenOverlay').style.display = 'flex';
-        }
-
-        function adjustFsScore(team, delta) {
-            const el = document.getElementById(`fs_${team}_score`);
-            let val = Math.max(0, parseInt(el.innerText) + delta);
-            el.innerText = val;
-
-            const t1 = parseInt(document.getElementById('fs_t1_score').innerText);
-            const t2 = parseInt(document.getElementById('fs_t2_score').innerText);
-            checkFsStatus(t1, t2);
-        }
-
-        function checkFsStatus(t1, t2) {
-            const statusEl = document.getElementById('fs_match_status');
-            if ((t1 >= 11 || t2 >= 11) && Math.abs(t1 - t2) >= 2) {
-                statusEl.innerText = t1 > t2 ? `${activeTeam1} WIN SET` : `${activeTeam2} WIN SET`;
-                statusEl.style.background = "#2ecc71";
-            } else if (t1 >= 10 && t2 >= 10) {
-                statusEl.innerText = "DEUCE";
-                statusEl.style.background = "#e67e22";
-            } else {
-                statusEl.innerText = "BERJALAN";
-                statusEl.style.background = "#e74c3c";
-            }
-        }
-
-        function saveFullscreenSet() {
-            const scoreT1 = document.getElementById('fs_t1_score').innerText;
-            const scoreT2 = document.getElementById('fs_t2_score').innerText;
-
-            // Masukkan kembali nilai dari Pop-Up Fullscreen ke input Modal Utama
-            document.getElementById(`input_set_${activeSetNum}_t1`).value = scoreT1;
-            document.getElementById(`input_set_${activeSetNum}_t2`).value = scoreT2;
-
-            closeFullscreenLive();
-        }
-
-        function closeFullscreenLive() {
-            document.getElementById('fullscreenOverlay').style.display = 'none';
-        }
-
-        function closeMatchModal() {
-            document.getElementById('matchModal').style.display = 'none';
-        }
-    </script>
+            <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
+        {% endfor %}
+    {% endif %}
+</div>
 </body>
-
 </html>

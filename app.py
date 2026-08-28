@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
-import random
 from flask import Flask, redirect, render_template, request, session, url_for
+import random
+import os
 
 app = Flask(__name__)
-app.secret_key = "pingpong_tournament_secret_key"
+
+# Membaca variabel SECRET_KEY dari environment Render
+app.secret_key = os.environ.get("SECRET_KEY")
 
 
 # ---------------- 1. ROUTE UTAMA ----------------

@@ -296,12 +296,18 @@
         <form action="{{ url_for('elimination') }}" method="POST">
             <div style="margin-bottom: 15px;">
                 <label><strong>Format Pertandingan:</strong></label>
-                <select name="match_format" style="width: 100%; padding: 8px; margin-top: 5px; font-size: 1rem;"
-                    required>
+                <select name="match_format" style="width: 100%; padding: 8px; margin-top: 5px; font-size: 1rem;" required>
                     <option value="3">Best of 3 (Mencapai 2 Kemenangan Set)</option>
                     <option value="5">Best of 5 (Mencapai 3 Kemenangan Set)</option>
+                    <option value="21">First get 21 point (1 Set ke 21 Poin)</option>
                 </select>
             </div>
+            
+            <!-- Bagian Badge Informasi Format -->
+            <span style="font-weight: bold; background: #e8f8f5; color: #16a085; padding: 6px 12px; border-radius: 5px;">
+                Format: {% if match_format == 21 %}First to 21 Points{% else %}Best of {{ match_format }}{% endif %}
+            </span>
+            </span>
             <div style="margin-bottom: 15px;">
                 <label><strong>Daftar Tim / Pemain (1 Nama per Baris):</strong></label>
                 <textarea name="teams" placeholder="Pemain A&#10;Pemain B&#10;Pemain C&#10;Pemain D"
@@ -488,10 +494,13 @@
 
         function checkFsStatus(t1, t2) {
             const statusEl = document.getElementById('fs_match_status');
-            if ((t1 >= 11 || t2 >= 11) && Math.abs(t1 - t2) >= 2) {
+            const targetPoint = matchFormat === 21 ? 21 : 11;
+            const deucePoint = matchFormat === 21 ? 20 : 10;
+        
+            if ((t1 >= targetPoint || t2 >= targetPoint) && Math.abs(t1 - t2) >= 2) {
                 statusEl.innerText = t1 > t2 ? `${activeTeam1} WIN SET` : `${activeTeam2} WIN SET`;
                 statusEl.style.background = "#2ecc71";
-            } else if (t1 >= 10 && t2 >= 10) {
+            } else if (t1 >= deucePoint && t2 >= deucePoint) {
                 statusEl.innerText = "DEUCE";
                 statusEl.style.background = "#e67e22";
             } else {

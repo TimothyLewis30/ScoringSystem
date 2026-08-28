@@ -176,14 +176,16 @@ def elimination():
     return redirect(url_for("elimination"))
 
   fmt = session.get("elim_fmt", 3)
+  print("HASIL DARI FMT", fmt)
   # Jika format 21 poin, modal hanya membutuhkan 1 set
   modal_sets = 1 if fmt == 21 else fmt
+
 
   return render_template(
       "elimination.html",
       rounds=session.get("elim_rounds", []),
       champion=session.get("elim_champion"),
-      match_format=modal_sets,
+      v_match_format_game=modal_sets,
       raw_match_format=fmt,
   )
 

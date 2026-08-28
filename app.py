@@ -205,9 +205,16 @@ def advance_elimination():
   idx = int(request.form.get("match_idx", -1))
   fmt = session.get("elim_fmt", 3)
 
-  # Tentukan berapa set yang diperiksa dan berapa target poin minimum
+  # Penentuan batas poin & jumlah set minimum berdasarkan format yang dipilih
   total_sets_to_check = 1 if fmt == 21 else fmt
   target_score = 21 if fmt == 21 else 11
+
+  if fmt == 21:
+    winning_sets_required = 1
+  elif fmt == 5:
+    winning_sets_required = 3
+  else:  # Best of 3
+    winning_sets_required = 2
 
   if rounds and 0 <= idx < len(rounds[-1]):
     m = rounds[-1][idx]
@@ -222,7 +229,7 @@ def advance_elimination():
       if s1 > 0 or s2 > 0:
         set_details.append({"t1": s1, "t2": s2})
 
-        # Cek syarat menang set berdasarkan target poin (11 atau 21) & selisih minimal 2
+        # Cek syarat menang set: minimal mencapai target_score (21 atau 11) & selisih minimal 2 poin
         if (s1 >= target_score or s2 >= target_score) and abs(s1 - s2) >= 2:
           if s1 > s2:
             t1_sets += 1
@@ -231,11 +238,14 @@ def advance_elimination():
 
     m["set_details"] = set_details
     m["sets_won"] = {"team1": t1_sets, "team2": t2_sets}
-    m["winner"] = (
-        m["team1"]
-        if t1_sets > t2_sets
-        else (m["team2"] if t2_sets > t1_sets else None)
-    )
+
+    # Pemenang pertandingan ditentukan jika jumlah set menang memenuhi batas minimum
+    if t1_sets >= winning_sets_required:
+      m["winner"] = m["team1"]
+    elif t2_sets >= winning_sets_required:
+      m["winner"] = m["team2"]
+    else:
+      m["winner"] = None
 
   if rounds and all(m["winner"] for m in rounds[-1]):
     winners = [m["winner"] for m in rounds[-1]]

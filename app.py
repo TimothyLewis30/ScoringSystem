@@ -14,7 +14,6 @@ def index():
 
 # ---------------- 2. LOGIC GROUP STAGE ----------------
 def generate_group_schedule(teams, start_time_str="08:00"):
-  # Buat semua pasangan match (Round Robin)
   pairings = [
       (teams[i], teams[j])
       for i in range(len(teams))
@@ -22,14 +21,12 @@ def generate_group_schedule(teams, start_time_str="08:00"):
   ]
   random.shuffle(pairings)
 
-  # Penjadwalan: Maksimal 2 match per slot jam & cegah bentrok tim
   slots = []
   for match in pairings:
     t1, t2 = match
     placed = False
     for slot in slots:
       teams_in_slot = {m[0] for m in slot} | {m[1] for m in slot}
-      # Cek jika slot belum penuh (<2 match) DAN tim belum bertanding di slot ini
       if len(slot) < 2 and t1 not in teams_in_slot and t2 not in teams_in_slot:
         slot.append(match)
         placed = True
@@ -37,7 +34,6 @@ def generate_group_schedule(teams, start_time_str="08:00"):
     if not placed:
       slots.append([match])
 
-  # Generate jam pertandingan (durasi 30 menit per slot)
   start_dt = datetime.strptime(start_time_str, "%H:%M")
   matches = []
   match_id = 1
@@ -87,7 +83,6 @@ def group_stage():
   teams = session.get("group_teams", [])
   matches = session.get("group_matches", [])
 
-  # Hitung Statistik Klasemen
   stats = {
       t: {"team": t, "played": 0, "won": 0, "lost": 0, "points": 0} for t in teams
   }
@@ -151,10 +146,11 @@ def make_bracket(teams):
           "team2": teams[i + 1] if i + 1 < len(teams) else "Lolos Otomatis",
           "winner": teams[i] if i + 1 >= len(teams) else None,
           "sets_won": {"team1": 0, "team2": 0},
-          "set_details": [],  # Menyimpan detail skor per set misal [{'t1': 11, 't2': 9}]
+          "set_details": [],
       }
       for i in range(0, len(teams), 2)
   ]
+
 
 @app.route("/elimination", methods=["GET", "POST"])
 def elimination():
@@ -179,11 +175,16 @@ def elimination():
     })
     return redirect(url_for("elimination"))
 
+  fmt = session.get("elim_fmt", 3)
+  # Jika format 21 poin, modal hanya membutuhkan 1 set
+  modal_sets = 1 if fmt == 21 else fmt
+
   return render_template(
       "elimination.html",
       rounds=session.get("elim_rounds", []),
       champion=session.get("elim_champion"),
-      match_format=session.get("elim_fmt", 3),
+      match_format=modal_sets,
+      raw_match_format=fmt,
   )
 
 
@@ -204,22 +205,25 @@ def advance_elimination():
   idx = int(request.form.get("match_idx", -1))
   fmt = session.get("elim_fmt", 3)
 
+  # Tentukan berapa set yang diperiksa dan berapa target poin minimum
+  total_sets_to_check = 1 if fmt == 21 else fmt
+  target_score = 21 if fmt == 21 else 11
+
   if rounds and 0 <= idx < len(rounds[-1]):
     m = rounds[-1][idx]
     t1_sets = 0
     t2_sets = 0
     set_details = []
 
-    for i in range(1, fmt + 1):
+    for i in range(1, total_sets_to_check + 1):
       s1 = int(request.form.get(f"set_{i}_t1") or 0)
       s2 = int(request.form.get(f"set_{i}_t2") or 0)
 
-      # Catat detail skor jika set dimainkan
       if s1 > 0 or s2 > 0:
         set_details.append({"t1": s1, "t2": s2})
 
-        # Aturan menang set pingpong (min 11 poin & selisih 2)
-        if (s1 >= 11 or s2 >= 11) and abs(s1 - s2) >= 2:
+        # Cek syarat menang set berdasarkan target poin (11 atau 21) & selisih minimal 2
+        if (s1 >= target_score or s2 >= target_score) and abs(s1 - s2) >= 2:
           if s1 > s2:
             t1_sets += 1
           else:
@@ -233,7 +237,6 @@ def advance_elimination():
         else (m["team2"] if t2_sets > t1_sets else None)
     )
 
-  # Cek jika seluruh match pada babak ini selesai, buat babak berikutnya
   if rounds and all(m["winner"] for m in rounds[-1]):
     winners = [m["winner"] for m in rounds[-1]]
     if len(winners) == 1:
@@ -244,7 +247,6 @@ def advance_elimination():
   session["elim_rounds"] = rounds
   session.modified = True
   return redirect(url_for("elimination"))
-
 
 
 @app.route("/elimination/reset")

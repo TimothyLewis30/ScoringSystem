@@ -297,12 +297,12 @@
             <div style="margin-bottom: 15px;">
                 <label><strong>Format Pertandingan:</strong></label>
                 <select name="match_format" style="width: 100%; padding: 8px; margin-top: 5px; font-size: 1rem;" required>
-                    <option value="3" {% if match_format == 3 or not match_format %}selected{% endif %}>Best of 3 (Mencapai 2 Kemenangan Set - 11 Poin)</option>
-                    <option value="5" {% if match_format == 5 %}selected{% endif %}>Best of 5 (Mencapai 3 Kemenangan Set - 11 Poin)</option>
-                    <option value="21" {% if match_format == 21 %}selected{% endif %}>First get 21 point (1 Set ke 21 Poin)</option>
+                    <option value="3">Best of 3 (Mencapai 2 Kemenangan Set)</option>
+                    <option value="5">Best of 5 (Mencapai 3 Kemenangan Set)</option>
+                    <option value="21">First get 21 point (1 Set ke 21 Poin)</option>
                 </select>
             </div>
-
+            
             <div style="margin-bottom: 15px;">
                 <label><strong>Daftar Tim / Pemain (1 Nama per Baris):</strong></label>
                 <textarea name="teams" placeholder="Pemain A&#10;Pemain B&#10;Pemain C&#10;Pemain D"
@@ -311,14 +311,14 @@
             <button type="submit" class="btn">Buat Braket Turnamen</button>
         </form>
         {% else %}
-        <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
             <a href="{{ url_for('shuffle_elimination') }}" class="btn" style="background: #e67e22;"
                 onclick="return confirm('Acak ulang tim?')">🔀 Acak Ulang Tim</a>
             <a href="{{ url_for('reset_elimination') }}" class="btn btn-danger"
                 onclick="return confirm('Reset turnamen?')">Reset Turnamen</a>
             <span
                 style="font-weight: bold; background: #e8f8f5; color: #16a085; padding: 6px 12px; border-radius: 5px;">
-                Format Aktif: {% if match_format == 21 %}First to 21 Points{% else %}Best of {{ match_format }} (11 Poin){% endif %}
+                Format: {% if match_format == 21 %}First to 21 Points{% else %}Best of {{ match_format }}{% endif %}
             </span>
         </div>
 
@@ -331,7 +331,7 @@
                 {% for match_idx in range(round_matches|length) %}
                 {% set match = round_matches[match_idx] %}
                 <div class="match-card {% if match.winner %}completed{% endif %}" {% if not match.winner and
-                    match.team2 !='Lolos Otomatis' %}
+                    round_idx==(rounds|length - 1) and match.team2 !='Lolos Otomatis' %}
                     onclick="openMatchModal('{{ match_idx }}', '{{ match.team1 }}', '{{ match.team2 }}')" {% endif %}>
 
                     <div class="team-row {% if match.winner == match.team1 %}winner{% endif %}">
@@ -390,7 +390,7 @@
         </div>
     </div>
 
-    <!-- 2. POP-UP FULLSCREEN LIVE SCORE -->
+    <!-- 2. POP-UP FULLSCREEN LIVE SCORE (HAMPIR 1 LAYAR PENUH) -->
     <div id="fullscreenOverlay" class="fullscreen-overlay">
         <div class="fs-header">
             <div class="fs-title" id="fs_set_title">LIVE SCORE - SET 1</div>
@@ -428,7 +428,9 @@
     </div>
 
     <script>
-        const matchFormat = parseInt("{{ match_format|default(3) }}");
+        const matchFormat = parseInt("{{ v_match_format_game }}");
+        console.log("INI HASIL DAARI MAATCH FORMAT YGY", matchFormat);
+        
         let activeTeam1 = "", activeTeam2 = "";
         let activeSetNum = 1;
 
@@ -444,6 +446,7 @@
             const tbody = document.getElementById('sets_table_body');
             tbody.innerHTML = '';
 
+            // Jika format 21 poin, hanya buat 1 set. Jika best of 3/5, buat sebanyak total set max.
             const totalSetsToRender = matchFormat === 21 ? 1 : matchFormat;
 
             for (let i = 1; i <= totalSetsToRender; i++) {
@@ -462,12 +465,14 @@
             document.getElementById('matchModal').style.display = 'block';
         }
 
+        // Buka Pop-up Live Score Fullscreen per Set
         function launchFullscreenLive(setNum) {
             activeSetNum = setNum;
             document.getElementById('fs_set_title').innerText = `🔴 LIVE SCOREBOARD - SET ${setNum}`;
             document.getElementById('fs_t1_name').innerText = activeTeam1;
             document.getElementById('fs_t2_name').innerText = activeTeam2;
 
+            // Ambil nilai existing jika ada
             const currentT1 = parseInt(document.getElementById(`input_set_${setNum}_t1`).value) || 0;
             const currentT2 = parseInt(document.getElementById(`input_set_${setNum}_t2`).value) || 0;
 
@@ -490,9 +495,11 @@
 
         function checkFsStatus(t1, t2) {
             const statusEl = document.getElementById('fs_match_status');
+            console.log("HASIL DARI MATCH FORMAT", matchFormat);
             
-            const targetPoint = matchFormat === 21 ? 21 : 11;
-            const deucePoint = matchFormat === 21 ? 20 : 10;
+            // Penentuan target poin dan ambang deuce berdasarkan format
+            const targetPoint = matchFormat === 1 ? 21 : 11;
+            const deucePoint = matchFormat === 1 ? 20 : 10;
         
             if ((t1 >= targetPoint || t2 >= targetPoint) && Math.abs(t1 - t2) >= 2) {
                 statusEl.innerText = t1 > t2 ? `${activeTeam1} WIN SET` : `${activeTeam2} WIN SET`;
@@ -510,6 +517,7 @@
             const scoreT1 = document.getElementById('fs_t1_score').innerText;
             const scoreT2 = document.getElementById('fs_t2_score').innerText;
 
+            // Masukkan kembali nilai dari Pop-Up Fullscreen ke input Modal Utama
             document.getElementById(`input_set_${activeSetNum}_t1`).value = scoreT1;
             document.getElementById(`input_set_${activeSetNum}_t2`).value = scoreT2;
 

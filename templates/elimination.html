@@ -284,7 +284,7 @@
 
       /* MODAL JUARA (3/4 LAYAR) */
       .champion-modal-content {
-        background-color: #f1c40f;
+        background-color: #e8e8e8;
         color: #2c3e50;
         width: 75vw;
         height: 75vh;
@@ -455,18 +455,14 @@
       {% if champion %}
       <div
         class="champion-box"
-        onclick="openChampionModal()"
+        onclick="openChampionModal()" 
         style="cursor: pointer"
         title="Klik untuk melihat pop-up juara"
       >
         🎉 KLIK UNTUK MELIHAT JUARA TURNAMEN 🎉
       </div>
 
-      <div
-        id="championModal"
-        class="modal"
-        style="display: flex; align-items: center; justify-content: center"
-      >
+      <div id="championModal" class="modal" style="display: none; align-items: center; justify-content: center" >
         <div class="champion-modal-content">
           <span
             class="close-btn"
@@ -476,6 +472,16 @@
           >
 
           <div class="champion-header-row">
+            <div class="top-left-logos">
+              <img
+                src="{{ url_for('static', filename='logo-doc.png') }}"
+                alt="Logo 1"
+              />
+              <img
+                src="{{ url_for('static', filename='Logo-YF-Color.png') }}"
+                alt="Logo 2"
+              />
+            </div>
             <img
               src="{{ url_for('static', filename='happy_cat.gif') }}"
               alt="Happy Cat"
@@ -496,11 +502,16 @@
               class="extra-gif-side1"
             />
 
-            <div class="champion-text-center">
-              <p class="sub-title-text">Selamat Kepada</p>
-              <div class="champion-modal-title">{{ champion }}</div>
-              <p class="sub-desc-text">Sebagai Juara Turnamen Pingpong!</p>
+          <div class="champion-text-center">
+            <p class="sub-title-text">Selamat Kepada</p>
+            
+            <div class="champion-title-wrapper">
+              <div class="champion-modal-title" style="margin: 0; display: inline-block;">{{ champion }}</div>
+              <div class="crown-icon-right">👑</div>
             </div>
+            
+            <p class="sub-desc-text">Sebagai Juara 1 Pingpong DOC lohh yaaa</p>
+          </div>
 
             <img
               src="{{ url_for('static', filename='spidey.gif') }}"
@@ -541,7 +552,7 @@
           >
             <option value="3">Best of 3 (Mencapai 2 Kemenangan Set)</option>
             <option value="5">Best of 5 (Mencapai 3 Kemenangan Set)</option>
-            <option value="21">First get 21 point (1 Set ke 21 Poin)</option>
+            <option value="21">First to 21 Points (1 Set ke 21 Poin)</option>
           </select>
         </div>
 
@@ -589,8 +600,8 @@
             border-radius: 5px;
           "
         >
-          Format: {% if match_format == 21 %}First to 21 Points{% else %}Best of
-          {{ match_format }}{% endif %}
+          Format: {% if v_match_format_game == 1 %}First to 21 Points{% else %}Best of
+          {{ v_match_format_game }}{% endif %}
         </span>
       </div>
 

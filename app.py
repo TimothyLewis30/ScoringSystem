@@ -7,6 +7,7 @@ app = Flask(__name__)
 
 # Membaca variabel SECRET_KEY dari environment Render
 app.secret_key = os.environ.get("SECRET_KEY")
+# app.secret_key = "supersecretkey"  # Ganti dengan kunci rahasia yang aman di lingkungan produksi
 
 
 # ---------------- 1. ROUTE UTAMA ----------------
@@ -142,17 +143,41 @@ def reset_group():
 
 # ---------------- 3. LOGIC ELIMINASI ----------------
 def make_bracket(teams):
-  random.shuffle(teams)
-  return [
-      {
-          "team1": teams[i],
-          "team2": teams[i + 1] if i + 1 < len(teams) else "Lolos Otomatis",
-          "winner": teams[i] if i + 1 >= len(teams) else None,
-          "sets_won": {"team1": 0, "team2": 0},
-          "set_details": [],
-      }
-      for i in range(0, len(teams), 2)
-  ]
+    # Acak susunan tim di setiap babak baru
+    random.shuffle(teams)
+    bracket = []
+    n = len(teams)
+
+    # Jika jumlah tim GANJIL, 1 tim terakhir diambil untuk "Lolos Otomatis"
+    has_bye = (n % 2 != 0)
+    
+    if has_bye:
+        bye_team = teams[-1]
+        playing_teams = teams[:-1]
+    else:
+        playing_teams = teams
+
+    # Pasangkan tim yang harus bertanding (Pasangan 2-2)
+    for i in range(0, len(playing_teams), 2):
+        bracket.append({
+            "team1": playing_teams[i],
+            "team2": playing_teams[i + 1],
+            "winner": None,
+            "sets_won": {"team1": 0, "team2": 0},
+            "set_details": []
+        })
+
+    # Jika ada 1 tim Lolos Otomatis, tambahkan sebagai match khusus yang langsung selesai
+    if has_bye:
+        bracket.append({
+            "team1": bye_team,
+            "team2": "Lolos Otomatis",
+            "winner": bye_team,  # Otomatis menang & masuk babak berikutnya
+            "sets_won": {"team1": 0, "team2": 0},
+            "set_details": []
+        })
+
+    return bracket
 
 
 @app.route("/elimination", methods=["GET", "POST"])
@@ -203,66 +228,68 @@ def shuffle_elimination():
     session.modified = True
   return redirect(url_for("elimination"))
 
-
 @app.route("/elimination/advance", methods=["POST"])
 def advance_elimination():
-  rounds = session.get("elim_rounds", [])
-  idx = int(request.form.get("match_idx", -1))
-  fmt = session.get("elim_fmt", 3)
+    rounds = session.get("elim_rounds", [])
+    idx = int(request.form.get("match_idx", -1))
+    fmt = session.get("elim_fmt", 3)
 
-  # Penentuan batas poin & jumlah set minimum berdasarkan format yang dipilih
-  total_sets_to_check = 1 if fmt == 21 else fmt
-  target_score = 21 if fmt == 21 else 11
+    # Penentuan batas poin & jumlah set minimum berdasarkan format yang dipilih
+    total_sets_to_check = 1 if fmt == 21 else fmt
+    target_score = 21 if fmt == 21 else 11
 
-  if fmt == 21:
-    winning_sets_required = 1
-  elif fmt == 5:
-    winning_sets_required = 3
-  else:  # Best of 3
-    winning_sets_required = 2
+    if fmt == 21:
+        winning_sets_required = 1
+    elif fmt == 5:
+        winning_sets_required = 3
+    else:  # Best of 3
+        winning_sets_required = 2
 
-  if rounds and 0 <= idx < len(rounds[-1]):
-    m = rounds[-1][idx]
-    t1_sets = 0
-    t2_sets = 0
-    set_details = []
+    if rounds and 0 <= idx < len(rounds[-1]):
+        m = rounds[-1][idx]
+        t1_sets = 0
+        t2_sets = 0
+        set_details = []
 
-    for i in range(1, total_sets_to_check + 1):
-      s1 = int(request.form.get(f"set_{i}_t1") or 0)
-      s2 = int(request.form.get(f"set_{i}_t2") or 0)
+        for i in range(1, total_sets_to_check + 1):
+            s1 = int(request.form.get(f"set_{i}_t1") or 0)
+            s2 = int(request.form.get(f"set_{i}_t2") or 0)
 
-      if s1 > 0 or s2 > 0:
-        set_details.append({"t1": s1, "t2": s2})
+            if s1 > 0 or s2 > 0:
+                set_details.append({"t1": s1, "t2": s2})
 
-        # Cek syarat menang set: minimal mencapai target_score (21 atau 11) & selisih minimal 2 poin
-        if (s1 >= target_score or s2 >= target_score) and abs(s1 - s2) >= 2:
-          if s1 > s2:
-            t1_sets += 1
-          else:
-            t2_sets += 1
+                # Syarat menang set: minimal mencapai target_score (21 atau 11) & selisih minimal 2 poin
+                if (s1 >= target_score or s2 >= target_score) and abs(s1 - s2) >= 2:
+                    if s1 > s2:
+                        t1_sets += 1
+                    else:
+                        t2_sets += 1
 
-    m["set_details"] = set_details
-    m["sets_won"] = {"team1": t1_sets, "team2": t2_sets}
+        m["set_details"] = set_details
+        m["sets_won"] = {"team1": t1_sets, "team2": t2_sets}
 
-    # Pemenang pertandingan ditentukan jika jumlah set menang memenuhi batas minimum
-    if t1_sets >= winning_sets_required:
-      m["winner"] = m["team1"]
-    elif t2_sets >= winning_sets_required:
-      m["winner"] = m["team2"]
-    else:
-      m["winner"] = None
+        # Pemenang pertandingan
+        if t1_sets >= winning_sets_required:
+            m["winner"] = m["team1"]
+        elif t2_sets >= winning_sets_required:
+            m["winner"] = m["team2"]
+        else:
+            m["winner"] = None
 
-  if rounds and all(m["winner"] for m in rounds[-1]):
-    winners = [m["winner"] for m in rounds[-1]]
-    if len(winners) == 1:
-      session["elim_champion"] = winners[0]
-    else:
-      rounds.append(make_bracket(winners))
+    # Jika SEMUA pertandingan pada babak ini sudah selesai:
+    if rounds and all(m["winner"] for m in rounds[-1]):
+        winners = [m["winner"] for m in rounds[-1]]
 
-  session["elim_rounds"] = rounds
-  session.modified = True
-  return redirect(url_for("elimination"))
+        if len(winners) == 1:
+            session["elim_champion"] = winners[0]
+        else:
+            # Pemenang diacak ulang untuk membentuk babak baru
+            # (Jika jumlah winners ganjil, otomatis hanya 1 yang dapat Lolos Otomatis di make_bracket)
+            rounds.append(make_bracket(winners))
 
+    session["elim_rounds"] = rounds
+    session.modified = True
+    return redirect(url_for("elimination"))
 
 @app.route("/elimination/reset")
 def reset_elimination():

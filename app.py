@@ -4,160 +4,139 @@ import random
 import os
 
 app = Flask(__name__)
-
-# Membaca variabel SECRET_KEY dari environment Render
-app.secret_key = os.environ.get("SECRET_KEY")
-# app.secret_key = "supersecretkey"  # Ganti dengan kunci rahasia yang aman di lingkungan produksi
-
+app.secret_key = "supersecretkey"
 
 # ---------------- 1. ROUTE UTAMA ----------------
 @app.route("/")
 def index():
-  return render_template("index.html")
+    return render_template("index.html")
 
 
-# ---------------- 2. LOGIC GROUP STAGE ----------------
-def generate_group_schedule(teams, start_time_str="08:00"):
-  pairings = [
-      (teams[i], teams[j])
-      for i in range(len(teams))
-      for j in range(i + 1, len(teams))
-  ]
-  random.shuffle(pairings)
-
-  slots = []
-  for match in pairings:
-    t1, t2 = match
-    placed = False
-    for slot in slots:
-      teams_in_slot = {m[0] for m in slot} | {m[1] for m in slot}
-      if len(slot) < 2 and t1 not in teams_in_slot and t2 not in teams_in_slot:
-        slot.append(match)
-        placed = True
-        break
-    if not placed:
-      slots.append([match])
-
-  start_dt = datetime.strptime(start_time_str, "%H:%M")
-  matches = []
-  match_id = 1
-
-  for slot_idx, slot in enumerate(slots):
-    match_start = start_dt + timedelta(minutes=30 * slot_idx)
-    match_end = match_start + timedelta(minutes=30)
-    time_slot = (
-        f"{match_start.strftime('%H:%M')} - {match_end.strftime('%H:%M')}"
-    )
-
-    for t1, t2 in slot:
-      matches.append({
-          "id": match_id,
-          "team1": t1,
-          "team2": t2,
-          "winner": None,
-          "time_slot": time_slot,
-      })
-      match_id += 1
-
-  return matches
-
-
-@app.route("/group-stage", methods=["GET", "POST"])
-def group_stage():
-  if request.method == "POST":
-    teams = [
-        t.strip()
-        for t in request.form.get("teams", "").split("\n")
-        if t.strip()
-    ]
-    start_time = request.form.get("start_time", "08:00")
-
-    if len(teams) < 2:
-      return render_template(
-          "group_stage.html", error="Minimal masukkan 2 tim!"
-      )
-
-    session.update({
-        "group_teams": teams,
-        "group_start_time": start_time,
-        "group_matches": generate_group_schedule(teams, start_time),
-    })
-    return redirect(url_for("group_stage"))
-
-  teams = session.get("group_teams", [])
-  matches = session.get("group_matches", [])
-
-  stats = {
-      t: {"team": t, "played": 0, "won": 0, "lost": 0, "points": 0} for t in teams
-  }
-  for m in matches:
-    if m["winner"]:
-      w = m["winner"]
-      l = m["team2"] if m["winner"] == m["team1"] else m["team1"]
-      stats[w]["won"] += 1
-      stats[w]["points"] += 1
-      stats[l]["lost"] += 1
-      stats[w]["played"] += 1
-      stats[l]["played"] += 1
-
-  standings = sorted(
-      stats.values(), key=lambda x: (x["points"], x["won"]), reverse=True
-  )
-  return render_template(
-      "group_stage.html", teams=teams, matches=matches, standings=standings
-  )
-
-
-@app.route("/group-stage/shuffle")
-def shuffle_group_matches():
-  teams = session.get("group_teams", [])
-  start_time = session.get("group_start_time", "08:00")
-  if teams:
-    session["group_matches"] = generate_group_schedule(teams, start_time)
-    session.modified = True
-  return redirect(url_for("group_stage"))
-
-
-@app.route("/group-stage/update", methods=["POST"])
-def update_group_match():
-  matches = session.get("group_matches", [])
-  match_id = int(request.form.get("match_id"))
-  winner = request.form.get("winner")
-
-  for m in matches:
-    if m["id"] == match_id:
-      m["winner"] = winner if winner != "" else None
-      break
-
-  session["group_matches"] = matches
-  session.modified = True
-  return redirect(url_for("group_stage"))
-
-
-@app.route("/group-stage/reset")
-def reset_group():
-  for k in ["group_teams", "group_matches", "group_start_time"]:
-    session.pop(k, None)
-  return redirect(url_for("group_stage"))
-
-
-# ---------------- 3. LOGIC ELIMINASI ----------------
-def make_bracket(teams):
-    # Acak susunan tim di setiap babak baru
+# ---------------- 2. LOGIC GROUP STAGE (ELIMINASI TANPA SKOR) ----------------
+def make_simple_bracket(teams):
+    """Membuat bagan eliminasi tanpa skor. 
+    Jika jumlah tim ganjil, tim terakhir otomatis Bye (Lolos Otomatis).
+    """
     random.shuffle(teams)
     bracket = []
     n = len(teams)
 
-    # Jika jumlah tim GANJIL, 1 tim terakhir diambil untuk "Lolos Otomatis"
     has_bye = (n % 2 != 0)
-    
     if has_bye:
         bye_team = teams[-1]
         playing_teams = teams[:-1]
     else:
         playing_teams = teams
 
-    # Pasangkan tim yang harus bertanding (Pasangan 2-2)
+    match_id = 1
+    for i in range(0, len(playing_teams), 2):
+        bracket.append({
+            "id": match_id,
+            "team1": playing_teams[i],
+            "team2": playing_teams[i + 1],
+            "winner": None
+        })
+        match_id += 1
+
+    if has_bye:
+        bracket.append({
+            "id": match_id,
+            "team1": bye_team,
+            "team2": "Lolos Otomatis",
+            "winner": bye_team  # Langsung lolos ke babak berikutnya
+        })
+
+    return bracket
+
+
+@app.route("/group-stage", methods=["GET", "POST"])
+def group_stage():
+    if request.method == "POST":
+        teams = [
+            t.strip()
+            for t in request.form.get("teams", "").split("\n")
+            if t.strip()
+        ]
+
+        if len(teams) < 2:
+            return render_template(
+                "group_stage.html", error="Minimal masukkan 2 tim!"
+            )
+
+        session.update({
+            "group_teams": teams,
+            "group_rounds": [make_simple_bracket(teams)],
+            "group_champion": None,
+        })
+        return redirect(url_for("group_stage"))
+
+    return render_template(
+        "group_stage.html",
+        teams=session.get("group_teams", []),
+        rounds=session.get("group_rounds", []),
+        champion=session.get("group_champion"),
+    )
+
+
+@app.route("/group-stage/update", methods=["POST"])
+def update_group_match():
+    rounds = session.get("group_rounds", [])
+    match_id = int(request.form.get("match_id", -1))
+    winner = request.form.get("winner")
+
+    if rounds:
+        current_round = rounds[-1]
+        for m in current_round:
+            if m["id"] == match_id:
+                m["winner"] = winner if winner != "" else None
+                break
+
+        # Jika seluruh pertandingan di babak saat ini sudah ada pemenangnya:
+        if all(m["winner"] for m in current_round):
+            winners = [m["winner"] for m in current_round]
+
+            if len(winners) == 1:
+                # Jika tersisa 1 pemenang, atur sebagai Juara
+                session["group_champion"] = winners[0]
+            else:
+                # Jika masih ada beberapa pemenang, buat babak eliminasi baru
+                rounds.append(make_simple_bracket(winners))
+
+    session["group_rounds"] = rounds
+    session.modified = True
+    return redirect(url_for("group_stage"))
+
+
+@app.route("/group-stage/reset")
+def reset_group():
+    for k in ["group_teams", "group_rounds", "group_champion"]:
+        session.pop(k, None)
+    return redirect(url_for("group_stage"))
+
+@app.route("/group-stage/shuffle")
+def shuffle_group():
+    teams = session.get("group_teams", [])
+    if teams:
+        session.update({
+            "group_rounds": [make_simple_bracket(teams)],
+            "group_champion": None,
+        })
+        session.modified = True
+    return redirect(url_for("group_stage"))
+
+# ---------------- 3. LOGIC ELIMINASI (DENGAN SKOR) ----------------
+def make_bracket(teams):
+    random.shuffle(teams)
+    bracket = []
+    n = len(teams)
+
+    has_bye = (n % 2 != 0)
+    if has_bye:
+        bye_team = teams[-1]
+        playing_teams = teams[:-1]
+    else:
+        playing_teams = teams
+
     for i in range(0, len(playing_teams), 2):
         bracket.append({
             "team1": playing_teams[i],
@@ -167,12 +146,11 @@ def make_bracket(teams):
             "set_details": []
         })
 
-    # Jika ada 1 tim Lolos Otomatis, tambahkan sebagai match khusus yang langsung selesai
     if has_bye:
         bracket.append({
             "team1": bye_team,
             "team2": "Lolos Otomatis",
-            "winner": bye_team,  # Otomatis menang & masuk babak berikutnya
+            "winner": bye_team,
             "sets_won": {"team1": 0, "team2": 0},
             "set_details": []
         })
@@ -182,51 +160,49 @@ def make_bracket(teams):
 
 @app.route("/elimination", methods=["GET", "POST"])
 def elimination():
-  if request.method == "POST":
-    teams = [
-        t.strip()
-        for t in request.form.get("teams", "").split("\n")
-        if t.strip()
-    ]
-    match_format = int(request.form.get("match_format", 3))
+    if request.method == "POST":
+        teams = [
+            t.strip()
+            for t in request.form.get("teams", "").split("\n")
+            if t.strip()
+        ]
+        match_format = int(request.form.get("match_format", 3))
 
-    if len(teams) < 2:
-      return render_template(
-          "elimination.html", error="Minimal masukkan 2 tim!"
-      )
+        if len(teams) < 2:
+            return render_template(
+                "elimination.html", error="Minimal masukkan 2 tim!"
+            )
 
-    session.update({
-        "elim_raw": teams,
-        "elim_fmt": match_format,
-        "elim_rounds": [make_bracket(teams)],
-        "elim_champion": None,
-    })
-    return redirect(url_for("elimination"))
+        session.update({
+            "elim_raw": teams,
+            "elim_fmt": match_format,
+            "elim_rounds": [make_bracket(teams)],
+            "elim_champion": None,
+        })
+        return redirect(url_for("elimination"))
 
-  fmt = session.get("elim_fmt", 3)
-  print("HASIL DARI FMT", fmt)
-  # Jika format 21 poin, modal hanya membutuhkan 1 set
-  modal_sets = 1 if fmt == 21 else fmt
+    fmt = session.get("elim_fmt", 3)
+    modal_sets = 1 if fmt == 21 else fmt
 
-
-  return render_template(
-      "elimination.html",
-      rounds=session.get("elim_rounds", []),
-      champion=session.get("elim_champion"),
-      v_match_format_game=modal_sets,
-      raw_match_format=fmt,
-  )
+    return render_template(
+        "elimination.html",
+        rounds=session.get("elim_rounds", []),
+        champion=session.get("elim_champion"),
+        v_match_format_game=modal_sets,
+        raw_match_format=fmt,
+    )
 
 
 @app.route("/elimination/shuffle")
 def shuffle_elimination():
-  if session.get("elim_raw"):
-    session.update({
-        "elim_rounds": [make_bracket(session["elim_raw"])],
-        "elim_champion": None,
-    })
-    session.modified = True
-  return redirect(url_for("elimination"))
+    if session.get("elim_raw"):
+        session.update({
+            "elim_rounds": [make_bracket(session["elim_raw"])],
+            "elim_champion": None,
+        })
+        session.modified = True
+    return redirect(url_for("elimination"))
+
 
 @app.route("/elimination/advance", methods=["POST"])
 def advance_elimination():
@@ -234,7 +210,6 @@ def advance_elimination():
     idx = int(request.form.get("match_idx", -1))
     fmt = session.get("elim_fmt", 3)
 
-    # Penentuan batas poin & jumlah set minimum berdasarkan format yang dipilih
     total_sets_to_check = 1 if fmt == 21 else fmt
     target_score = 21 if fmt == 21 else 11
 
@@ -242,7 +217,7 @@ def advance_elimination():
         winning_sets_required = 1
     elif fmt == 5:
         winning_sets_required = 3
-    else:  # Best of 3
+    else:
         winning_sets_required = 2
 
     if rounds and 0 <= idx < len(rounds[-1]):
@@ -258,7 +233,6 @@ def advance_elimination():
             if s1 > 0 or s2 > 0:
                 set_details.append({"t1": s1, "t2": s2})
 
-                # Syarat menang set: minimal mencapai target_score (21 atau 11) & selisih minimal 2 poin
                 if (s1 >= target_score or s2 >= target_score) and abs(s1 - s2) >= 2:
                     if s1 > s2:
                         t1_sets += 1
@@ -268,7 +242,6 @@ def advance_elimination():
         m["set_details"] = set_details
         m["sets_won"] = {"team1": t1_sets, "team2": t2_sets}
 
-        # Pemenang pertandingan
         if t1_sets >= winning_sets_required:
             m["winner"] = m["team1"]
         elif t2_sets >= winning_sets_required:
@@ -276,27 +249,31 @@ def advance_elimination():
         else:
             m["winner"] = None
 
-    # Jika SEMUA pertandingan pada babak ini sudah selesai:
     if rounds and all(m["winner"] for m in rounds[-1]):
         winners = [m["winner"] for m in rounds[-1]]
 
         if len(winners) == 1:
             session["elim_champion"] = winners[0]
         else:
-            # Pemenang diacak ulang untuk membentuk babak baru
-            # (Jika jumlah winners ganjil, otomatis hanya 1 yang dapat Lolos Otomatis di make_bracket)
             rounds.append(make_bracket(winners))
 
     session["elim_rounds"] = rounds
     session.modified = True
     return redirect(url_for("elimination"))
 
+
 @app.route("/elimination/reset")
 def reset_elimination():
-  for k in ["elim_raw", "elim_fmt", "elim_rounds", "elim_champion"]:
-    session.pop(k, None)
-  return redirect(url_for("elimination"))
+    for k in ["elim_raw", "elim_fmt", "elim_rounds", "elim_champion"]:
+        session.pop(k, None)
+    return redirect(url_for("elimination"))
 
+
+# ---------------- 4. KEEP-ALIVE ENDPOINT (UNTUK RENDER) ----------------
+@app.route("/ping", methods=["GET"])
+def ping():
+    """Endpoint ringan untuk di-hit berkala agar Render tidak sleep."""
+    return {"status": "alive", "message": "Server is active!"}, 200
 
 if __name__ == "__main__":
-  app.run(debug=True)
+    app.run(debug=True)
